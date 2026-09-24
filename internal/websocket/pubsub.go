@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
 // PubSub handles Redis Pub/Sub for multi-instance WebSocket communication
 type PubSub struct {
-	client *redis.Client
-	hub    *Hub
-	ctx    context.Context
+	client   *redis.Client
+	hub      *Hub
+	ctx      context.Context
+	channels []string
 }
 
 // NewPubSub creates a new PubSub instance
@@ -26,21 +28,32 @@ func NewPubSub(client *redis.Client, hub *Hub) *PubSub {
 
 // Subscribe subscribes to Redis channels and forwards messages to the hub
 func (ps *PubSub) Subscribe(channels ...string) error {
-	pubsub := ps.client.Subscribe(ps.ctx, channels...)
-	_, err := pubsub.Receive(ps.ctx)
-	if err != nil {
-		return err
-	}
+	ps.channels = channels
+	return ps.subscribeWithRetry()
+}
 
-	ch := pubsub.Channel()
+// subscribeWithRetry subscribes with automatic reconnection
+func (ps *PubSub) subscribeWithRetry() error {
+	for {
+		pubsub := ps.client.Subscribe(ps.ctx, ps.channels...)
+		_, err := pubsub.Receive(ps.ctx)
+		if err != nil {
+			log.Printf("Redis Pub/Sub subscribe error: %v, retrying in 5s...", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
-	go func() {
+		ch := pubsub.Channel()
+
 		for msg := range ch {
 			ps.handleMessage(msg.Payload)
 		}
-	}()
 
-	return nil
+		// Channel closed, attempt reconnection
+		log.Printf("Redis Pub/Sub connection lost, reconnecting...")
+		pubsub.Close()
+		time.Sleep(5 * time.Second)
+	}
 }
 
 // Publish publishes a message to a Redis channel

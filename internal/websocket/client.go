@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"messenger-svyaz/internal/presence"
 )
 
 const (
@@ -27,9 +29,6 @@ const (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for now
-	},
 }
 
 // Client is a middleman between the websocket connection and the hub.
@@ -54,12 +53,18 @@ type Client struct {
 	// Rate limiter for this client
 	RateLimiter *TokenBucket
 
+	// Presence manager
+	Presence *presence.Presence
+
 	mu sync.Mutex
 }
 
 // ReadPump reads messages from the websocket connection to the hub.
 func (c *Client) ReadPump() {
 	defer func() {
+		if c.Presence != nil {
+			c.Presence.SetOffline(context.Background(), c.Username)
+		}
 		c.Hub.unregister <- c
 		c.Conn.Close()
 	}()
@@ -68,6 +73,9 @@ func (c *Client) ReadPump() {
 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.Conn.SetPongHandler(func(string) error {
 		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		if c.Presence != nil {
+			c.Presence.Heartbeat(context.Background(), c.Username)
+		}
 		return nil
 	})
 
@@ -116,11 +124,16 @@ func (c *Client) WritePump() {
 			w.Write(message)
 
 			// Add queued chat messages to the current websocket message.
-			n := len(c.Send)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.Send)
+			for {
+				select {
+				case msg := <-c.Send:
+					w.Write([]byte{'\n'})
+					w.Write(msg)
+				default:
+					goto done
+				}
 			}
+		done:
 
 			if err := w.Close(); err != nil {
 				return

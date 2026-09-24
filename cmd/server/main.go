@@ -14,6 +14,7 @@ import (
 	"messenger-svyaz/internal/db"
 	"messenger-svyaz/internal/db/sqlc"
 	"messenger-svyaz/internal/handler"
+	"messenger-svyaz/internal/presence"
 	"messenger-svyaz/internal/repository"
 	"messenger-svyaz/internal/service"
 	"messenger-svyaz/internal/websocket"
@@ -66,6 +67,9 @@ func main() {
 	jwtService := service.NewJWTService(cfg.JWT.Secret, cfg.JWT.Expiration)
 	wsRateLimiter := service.NewWebSocketRateLimiter()
 
+	// Initialize presence
+	presence := presence.NewPresence(redisClient)
+
 	// Initialize WebSocket hub
 	hub := websocket.NewHub()
 	go hub.Run()
@@ -87,7 +91,7 @@ func main() {
 	authMiddleware := handler.NewAuthMiddleware(jwtService)
 
 	// Initialize WebSocket handler
-	wsHandler := websocket.NewWebSocketHandler(hub, pubsub, authMiddleware, wsRateLimiter)
+	wsHandler := websocket.NewWebSocketHandler(hub, pubsub, authMiddleware, wsRateLimiter, cfg.AllowedOrigins, presence)
 
 	// Setup router
 	r := chi.NewRouter()

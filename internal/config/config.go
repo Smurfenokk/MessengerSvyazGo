@@ -9,11 +9,12 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	JWT      JWTConfig
-	Storage  StorageConfig
+	Server         ServerConfig
+	Database       DatabaseConfig
+	Redis          RedisConfig
+	JWT            JWTConfig
+	Storage        StorageConfig
+	AllowedOrigins []string
 }
 
 type ServerConfig struct {
@@ -73,6 +74,7 @@ func Load() (*Config, error) {
 			Type: getEnv("STORAGE_TYPE", "local"),
 			Path: getEnv("STORAGE_PATH", "./data"),
 		},
+		AllowedOrigins: getEnvSlice("ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://localhost:8080"}),
 	}
 
 	if cfg.JWT.Secret == "change-me-in-production" {
@@ -103,6 +105,13 @@ func getEnvInt64(key string, defaultVal int64) int64 {
 		if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
 			return intVal
 		}
+	}
+	return defaultVal
+}
+
+func getEnvSlice(key string, defaultVal []string) []string {
+	if val := os.Getenv(key); val != "" {
+		return []string{val}
 	}
 	return defaultVal
 }

@@ -63,16 +63,24 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 		case message := <-h.broadcast:
 			h.mu.RLock()
+			deadClients := make([]*Client, 0)
 			for _, client := range h.clients {
 				select {
 				case client.Send <- message:
 				default:
 					// Client send buffer is full, close connection
-					close(client.Send)
-					delete(h.clients, client.Username)
+					deadClients = append(deadClients, client)
 				}
 			}
 			h.mu.RUnlock()
+
+			// Remove dead clients with write lock
+			h.mu.Lock()
+			for _, client := range deadClients {
+				close(client.Send)
+				delete(h.clients, client.Username)
+			}
+			h.mu.Unlock()
 		}
 	}
 }

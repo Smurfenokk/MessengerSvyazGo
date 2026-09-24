@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: messenger-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: messenger
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - messenger-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: messenger-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - messenger-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: messenger-app
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_DSN=postgres://postgres:postgres@postgres:5432/messenger?sslmode=disable
+      - REDIS_ADDR=redis:6379
+      - JWT_SECRET=change-me-in-production
+      - STORAGE_TYPE=local
+      - STORAGE_PATH=/app/data
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - messenger-net
+    restart: unless-stopped
+
+networks:
+  messenger-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

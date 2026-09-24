@@ -3,22 +3,26 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"messenger-svyaz/internal/domain"
 	"messenger-svyaz/internal/id"
 	"messenger-svyaz/internal/repository"
+	"messenger-svyaz/internal/websocket"
 )
 
 type GroupHandler struct {
 	groupRepo *repository.GroupRepository
 	userRepo  *repository.UserRepository
+	pubsub    *websocket.PubSub
 }
 
-func NewGroupHandler(groupRepo *repository.GroupRepository, userRepo *repository.UserRepository) *GroupHandler {
+func NewGroupHandler(groupRepo *repository.GroupRepository, userRepo *repository.UserRepository, pubsub *websocket.PubSub) *GroupHandler {
 	return &GroupHandler{
 		groupRepo: groupRepo,
 		userRepo:  userRepo,
+		pubsub:    pubsub,
 	}
 }
 
@@ -272,7 +276,18 @@ func (h *GroupHandler) SendGroupMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// TODO: emit via WebSocket to group
+	// Emit via WebSocket to group
+	messageData := map[string]interface{}{
+		"id":        messageID,
+		"group_id":  req.GroupID,
+		"sender":    currentUser,
+		"content":   req.Content,
+		"type":      req.Type,
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+	if h.pubsub != nil {
+		h.pubsub.PublishNewGroupMessage(req.GroupID, currentUser, messageData)
+	}
 
 	SuccessResponse(w, nil)
 }

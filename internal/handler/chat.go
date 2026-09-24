@@ -3,20 +3,24 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"messenger-svyaz/internal/domain"
 	"messenger-svyaz/internal/id"
 	"messenger-svyaz/internal/repository"
+	"messenger-svyaz/internal/websocket"
 )
 
 type ChatHandler struct {
 	messageRepo *repository.MessageRepository
+	pubsub      *websocket.PubSub
 }
 
-func NewChatHandler(messageRepo *repository.MessageRepository) *ChatHandler {
+func NewChatHandler(messageRepo *repository.MessageRepository, pubsub *websocket.PubSub) *ChatHandler {
 	return &ChatHandler{
 		messageRepo: messageRepo,
+		pubsub:      pubsub,
 	}
 }
 
@@ -93,7 +97,18 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: emit via WebSocket to receiver
+	// Emit via WebSocket to receiver
+	messageData := map[string]interface{}{
+		"id":        messageID,
+		"sender":    currentUser,
+		"receiver":  req.Receiver,
+		"content":   req.Content,
+		"type":      req.Type,
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+	if h.pubsub != nil {
+		h.pubsub.PublishNewMessage(currentUser, req.Receiver, messageData)
+	}
 
 	SuccessResponse(w, map[string]interface{}{
 		"message_id": messageID,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"messenger-svyaz/internal/handler"
@@ -44,16 +45,19 @@ func (wh *WebSocketHandler) ServeWebSocket(w http.ResponseWriter, r *http.Reques
 
 	// Upgrade to WebSocket with origin check
 	origin := r.Header.Get("Origin")
-	allowed := false
-	for _, allowedOrigin := range wh.allowedOrigins {
-		if origin == allowedOrigin {
-			allowed = true
-			break
+	// Allow empty Origin (e.g., C# ClientWebSocket doesn't send it)
+	if origin != "" {
+		allowed := false
+		for _, allowedOrigin := range wh.allowedOrigins {
+			if origin == allowedOrigin {
+				allowed = true
+				break
+			}
 		}
-	}
-	if !allowed {
-		http.Error(w, "Origin not allowed", http.StatusForbidden)
-		return
+		if !allowed {
+			http.Error(w, "Origin not allowed", http.StatusForbidden)
+			return
+		}
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -64,21 +68,24 @@ func (wh *WebSocketHandler) ServeWebSocket(w http.ResponseWriter, r *http.Reques
 
 	// Create client
 	client := &Client{
-		Hub:         wh.hub,
-		Conn:        conn,
-		Username:    username,
-		Send:        make(chan []byte, 256),
-		ChatRooms:   make(map[string]bool),
-		GroupRooms:  make(map[string]bool),
-		RateLimiter: wh.rateLimiter.GetOrCreate(username),
-		Presence:    wh.presence,
+		Hub:              wh.hub,
+		Conn:             conn,
+		Username:         username,
+		Send:             make(chan []byte, 256),
+		ChatRooms:        make(map[string]bool),
+		GroupRooms:       make(map[string]bool),
+		RateLimiter:      wh.rateLimiter.GetOrCreate(username),
+		RateLimiterParent: wh.rateLimiter,
+		Presence:         wh.presence,
 	}
 
 	// Mark user as online
 	if wh.presence != nil {
-		if err := wh.presence.SetOnline(context.Background(), username); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := wh.presence.SetOnline(ctx, username); err != nil {
 			log.Printf("Failed to set user online: %v", err)
 		}
+		cancel()
 	}
 
 	// Register client

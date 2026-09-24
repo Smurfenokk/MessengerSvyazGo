@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"messenger-svyaz/internal/presence"
+	"messenger-svyaz/internal/service"
 )
 
 const (
@@ -53,6 +54,9 @@ type Client struct {
 	// Rate limiter for this client
 	RateLimiter *TokenBucket
 
+	// Rate limiter parent for cleanup
+	RateLimiterParent *service.WebSocketRateLimiter
+
 	// Presence manager
 	Presence *presence.Presence
 
@@ -63,7 +67,12 @@ type Client struct {
 func (c *Client) ReadPump() {
 	defer func() {
 		if c.Presence != nil {
-			c.Presence.SetOffline(context.Background(), c.Username)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			c.Presence.SetOffline(ctx, c.Username)
+			cancel()
+		}
+		if c.RateLimiterParent != nil {
+			c.RateLimiterParent.Remove(c.Username)
 		}
 		c.Hub.unregister <- c
 		c.Conn.Close()
@@ -74,7 +83,9 @@ func (c *Client) ReadPump() {
 	c.Conn.SetPongHandler(func(string) error {
 		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 		if c.Presence != nil {
-			c.Presence.Heartbeat(context.Background(), c.Username)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			c.Presence.Heartbeat(ctx, c.Username)
+			cancel()
 		}
 		return nil
 	})
@@ -92,6 +103,13 @@ func (c *Client) ReadPump() {
 		if c.RateLimiter != nil && !c.RateLimiter.Allow() {
 			log.Printf("Rate limit exceeded for user %s", c.Username)
 			continue
+		}
+
+		// Heartbeat on successful read
+		if c.Presence != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			c.Presence.Heartbeat(ctx, c.Username)
+			cancel()
 		}
 
 		// Handle message

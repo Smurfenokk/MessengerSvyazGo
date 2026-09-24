@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -111,7 +112,17 @@ func getEnvInt64(key string, defaultVal int64) int64 {
 
 func getEnvSlice(key string, defaultVal []string) []string {
 	if val := os.Getenv(key); val != "" {
-		return []string{val}
+		parts := strings.Split(val, ",")
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
 	}
 	return defaultVal
 }

@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"log"
 	"sync"
 )
 
@@ -74,13 +75,10 @@ func (h *Hub) Run() {
 			}
 			h.mu.RUnlock()
 
-			// Remove dead clients with write lock
-			h.mu.Lock()
+			// Remove dead clients via unregister channel for proper cleanup
 			for _, client := range deadClients {
-				close(client.Send)
-				delete(h.clients, client.Username)
+				h.unregister <- client
 			}
-			h.mu.Unlock()
 		}
 	}
 }
@@ -179,6 +177,7 @@ func (h *Hub) SendToChatRoom(room string, message []byte) {
 				case client.Send <- message:
 				default:
 					// Client send buffer is full
+					log.Printf("Dropped message to user %s in chat room %s: buffer full", username, room)
 				}
 			}
 		}
@@ -197,6 +196,7 @@ func (h *Hub) SendToGroupRoom(room string, message []byte) {
 				case client.Send <- message:
 				default:
 					// Client send buffer is full
+					log.Printf("Dropped message to user %s in group room %s: buffer full", username, room)
 				}
 			}
 		}
@@ -213,6 +213,7 @@ func (h *Hub) SendToUser(username string, message []byte) {
 		case client.Send <- message:
 		default:
 			// Client send buffer is full
+			log.Printf("Dropped message to user %s: buffer full", username)
 		}
 	}
 }

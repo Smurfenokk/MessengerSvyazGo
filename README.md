@@ -160,10 +160,10 @@ go run cmd/admin/main.go stats
 
 - [x] Stage 1: Analysis
 - [x] Stage 2: Skeleton (config, DB, health-check)
-- [ ] Stage 3: Domain & Database (migrations, sqlc, repositories)
-- [ ] Stage 4: HTTP API (auth, users, chats, groups)
-- [ ] Stage 5: WebSocket Hub (Redis Pub/Sub, multi-instance)
-- [ ] Stage 6: Final assembly (Docker, README)
+- [x] Stage 3: Domain & Database (migrations, sqlc, repositories)
+- [x] Stage 4: HTTP API (auth, users, chats, groups)
+- [x] Stage 5: WebSocket Hub (Redis Pub/Sub, multi-instance)
+- [x] Stage 6: Final assembly (Storage, Presence, CLI, Docker)
 
 ## Notes
 
